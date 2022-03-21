@@ -1,7 +1,7 @@
 import os
 from setuptools import setup
 
-classifiers = [
+classifiers = ([
     'Development Status :: 4 - Beta',
     'Intended Audience :: Developers',
     'License :: OSI Approved :: MIT License',
@@ -10,9 +10,8 @@ classifiers = [
     'Operating System :: MacOS :: MacOS X',
     'Topic :: Software Development :: Testing',
     'Topic :: Software Development :: Libraries',
-    'Topic :: Utilities'] + [
-    ('Programming Language :: Python :: %s' % x) for x in
-    '2 2.6 2.7 3 3.3 3.4 3.5'.split()]
+    'Topic :: Utilities'] + [f'Programming Language :: Python :: {x}' for x in
+    '2 2.6 2.7 3 3.3 3.4 3.5'.split()])
 
 with open('README.rst') as fd:
     long_description = fd.read()

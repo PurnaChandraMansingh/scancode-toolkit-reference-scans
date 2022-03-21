@@ -101,9 +101,4 @@ def validate_platforms_for_pypi(platforms):
     supported.
     """
 
-    # Check that if it's a binary wheel, it's on a supported platform
-    invalid_tags = []
-    for plat in platforms:
-        if not is_supported_platform_tag(plat):
-            invalid_tags.append(plat)
-    return invalid_tags
+    return [plat for plat in platforms if not is_supported_platform_tag(plat)]

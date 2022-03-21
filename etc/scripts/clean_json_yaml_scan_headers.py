@@ -25,8 +25,7 @@ def write_json(data, path):
 
 
 def load_yaml(path):
-    data = saneyaml.load(open(path).read())
-    return data
+    return saneyaml.load(open(path).read())
 
 
 def write_yaml(data, path):

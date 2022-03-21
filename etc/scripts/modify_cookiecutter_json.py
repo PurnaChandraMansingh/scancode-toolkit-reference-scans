@@ -44,12 +44,13 @@ def cli(cookiecutter_location, new_version, old_version, latest_commit):
     Write a cookiecutter.json with scancode versions `new_version` and `old_version`,
     and `latest_commit`.
     """
-    data = {}
-    data["dir_name"] = "latest"
-    data["new_version"] = new_version
-    data["old_version"] = old_version
-    data["latest_commit"] = latest_commit
-    
+    data = {
+        "dir_name": "latest",
+        "new_version": new_version,
+        "old_version": old_version,
+        "latest_commit": latest_commit,
+    }
+
     write_json(data=data, path=cookiecutter_location)
 
 if __name__ == '__main__':

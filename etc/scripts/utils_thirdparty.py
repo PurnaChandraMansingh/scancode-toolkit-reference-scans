@@ -167,11 +167,7 @@ def fetch_wheels(
     """
     missed = []
 
-    if not allow_unpinned:
-        force_pinned = True
-    else:
-        force_pinned = False
-
+    force_pinned = not allow_unpinned
     rrp = list(get_required_remote_packages(
         requirements_file=requirements_file,
         force_pinned=force_pinned,
@@ -186,26 +182,21 @@ def fetch_wheels(
             yield None, f'fetch_wheels: Missing package in remote repo: {nv}'
 
         else:
-            fetched_filename = package.fetch_wheel(
+            if fetched_filename := package.fetch_wheel(
                 environment=environment,
                 fetched_filenames=fetched_filenames,
                 dest_dir=dest_dir,
-            )
-
-            if fetched_filename:
+            ):
                 fetched_filenames.add(fetched_filename)
                 error = None
             else:
-                if fetched_filename in fetched_filenames:
-                    error = None
-                else:
-                    error = f'Failed to fetch'
+                error = None if fetched_filename in fetched_filenames else 'Failed to fetch'
             yield package, error
 
     if missed:
         rr = get_remote_repo()
         print()
-        print(f'===> fetch_wheels: Missed some packages')
+        print('===> fetch_wheels: Missed some packages')
         for n, v in missed:
             nv = f'{n}=={v}' if v else n
             print(f'Missed package {nv} in remote repo, has only:')
@@ -237,11 +228,7 @@ def fetch_sources(
     """
     missed = []
 
-    if not allow_unpinned:
-        force_pinned = True
-    else:
-        force_pinned = False
-
+    force_pinned = not allow_unpinned
     rrp = list(get_required_remote_packages(
         requirements_file=requirements_file,
         force_pinned=force_pinned,
@@ -255,11 +242,11 @@ def fetch_sources(
             yield None, f'fetch_sources: Missing package in remote repo: {nv}'
 
         elif not package.sdist:
-            yield package, f'Missing sdist in links'
+            yield (package, 'Missing sdist in links')
 
         else:
             fetched = package.fetch_sdist(dest_dir=dest_dir)
-            error = f'Failed to fetch' if not fetched else None
+            error = None if fetched else 'Failed to fetch'
             yield package, error
 
 ################################################################################
@@ -577,21 +564,16 @@ class Distribution(NameVer):
         version = self.version
         filename = self.filename
 
-        pypi_package = get_pypi_package(name=name, version=version)
-        if pypi_package:
-            pypi_url = pypi_package.get_url_for_filename(filename)
-            if pypi_url:
+        if pypi_package := get_pypi_package(name=name, version=version):
+            if pypi_url := pypi_package.get_url_for_filename(filename):
                 return pypi_url
 
-        remote_package = get_remote_package(name=name, version=version)
-        if remote_package:
-            remote_url = remote_package.get_url_for_filename(filename)
-            if remote_url:
-                return remote_url
-        else:
+        if not (remote_package := get_remote_package(name=name, version=version)):
             # the package may not have been published yet, so we craft a URL
             # using our remote base URL
             return self.build_remote_download_url(self.filename)
+        if remote_url := remote_package.get_url_for_filename(filename):
+            return remote_url
 
     def purl_identifiers(self, skinny=False):
         """
@@ -722,22 +704,18 @@ class Distribution(NameVer):
         if isinstance(about_filename_or_data, str):
             # that's an about_filename
             about_path = os.path.join(dest_dir, about_filename_or_data)
-            if os.path.exists(about_path):
-                with open(about_path) as fi:
-                    about_data = saneyaml.load(fi.read())
-            else:
+            if not os.path.exists(about_path):
                 return False
+            with open(about_path) as fi:
+                about_data = saneyaml.load(fi.read())
         else:
             about_data = about_filename_or_data
 
-        md5 = about_data.pop('checksum_md5', None)
-        if md5:
+        if md5 := about_data.pop('checksum_md5', None):
             about_data['md5'] = md5
-        sha1 = about_data.pop('checksum_sha1', None)
-        if sha1:
+        if sha1 := about_data.pop('checksum_sha1', None):
             about_data['sha1'] = sha1
-        sha256 = about_data.pop('checksum_sha256', None)
-        if sha256:
+        if sha256 := about_data.pop('checksum_sha256', None):
             about_data['sha256'] = sha256
 
         about_data.pop('about_resource', None)
@@ -769,8 +747,9 @@ class Distribution(NameVer):
         notice_file = about_data.pop('notice_file', None)
         if notice_file:
             try:
-                notice_text = fetch_content_from_path_or_url_through_cache(self.notice_download_url)
-                if notice_text:
+                if notice_text := fetch_content_from_path_or_url_through_cache(
+                    self.notice_download_url
+                ):
                     about_data['notice_text'] = notice_text
             except RemoteNotFetchedException:
                 print(f'Failed to fetch NOTICE file: {self.notice_download_url}')
@@ -941,8 +920,7 @@ class Distribution(NameVer):
         Return True if any data was updated, False otherwise. Raise an exception
         if there are key data conflicts.
         """
-        package_url = data.get('package_url')
-        if package_url:
+        if package_url := data.get('package_url'):
             purl_from_data = packageurl.PackageURL.from_string(package_url)
             purl_from_self = packageurl.PackageURL.from_string(self.package_url)
             if purl_from_data != purl_from_self:
@@ -952,8 +930,7 @@ class Distribution(NameVer):
                 return
 
         data.pop('about_resource', None)
-        dl = data.pop('download_url', None)
-        if dl:
+        if dl := data.pop('download_url', None):
             data['path_or_url'] = dl
 
         updated = False
@@ -1235,10 +1212,7 @@ class PypiPackage(NameVer):
         """
         A requirement specifier for this package
         """
-        if self.version:
-            return f'{self.name}=={self.version}'
-        else:
-            return self.name
+        return f'{self.name}=={self.version}' if self.version else self.name
 
     @property
     def specifier_with_hashes(self):
@@ -1408,11 +1382,7 @@ class PypiPackage(NameVer):
         their name is in a provided ``fetched_filenames`` set.
         """
         fetched_wheel_filename = None
-        if fetched_filenames is not None:
-            fetched_filenames = fetched_filenames
-        else:
-            fetched_filenames = set()
-
+        fetched_filenames = set() if fetched_filenames is None else fetched_filenames
         for wheel in self.get_supported_wheels(environment):
 
             if wheel.filename not in fetched_filenames:
@@ -1517,8 +1487,7 @@ class PypiPackage(NameVer):
         """
         if self.sdist:
             yield self.sdist
-        for wheel in self.wheels:
-            yield wheel
+        yield from self.wheels
 
     def get_url_for_filename(self, filename):
         """
@@ -1839,14 +1808,13 @@ class Cache:
         filename = os.path.basename(path_or_url.strip('/'))
         cached = os.path.join(self.directory, filename)
 
-        if not os.path.exists(cached):
-            content = get_file_content(path_or_url=path_or_url, as_text=as_text)
-            wmode = 'w' if as_text else 'wb'
-            with open(cached, wmode) as fo:
-                fo.write(content)
-            return content
-        else:
+        if os.path.exists(cached):
             return get_local_file_content(path=cached, as_text=as_text)
+        content = get_file_content(path_or_url=path_or_url, as_text=as_text)
+        wmode = 'w' if as_text else 'wb'
+        with open(cached, wmode) as fo:
+            fo.write(content)
+        return content
 
     def put(self, filename, content):
         """
@@ -1912,19 +1880,18 @@ def get_remote_file_content(url, as_text=True, headers_only=False, headers=None,
     with requests.get(url, allow_redirects=True, stream=True, headers=headers) as response:
         status = response.status_code
         if status != requests.codes.ok:  # NOQA
-            if status == 429 and _delay < 20:
-                # too many requests: start some exponential delay
-                increased_delay = (_delay * 2) or 1
-
-                return get_remote_file_content(
-                    url,
-                    as_text=as_text,
-                    headers_only=headers_only,
-                    _delay=increased_delay,
-                )
-
-            else:
+            if status != 429 or _delay >= 20:
                 raise RemoteNotFetchedException(f'Failed HTTP request from {url} with {status}')
+
+            # too many requests: start some exponential delay
+            increased_delay = (_delay * 2) or 1
+
+            return get_remote_file_content(
+                url,
+                as_text=as_text,
+                headers_only=headers_only,
+                _delay=increased_delay,
+            )
 
         if headers_only:
             return response.headers, None
@@ -2056,7 +2023,7 @@ def fetch_missing_sources(dest_dir=THIRDPARTY_DIR):
                     name=package.name, version=package.version)
 
                 if pypi_package and pypi_package.sdist:
-                    print(f'Fetching sources from Pypi')
+                    print('Fetching sources from Pypi')
                     pypi_package.fetch_sdist(dest_dir=dest_dir)
                     continue
                 else:
@@ -2064,14 +2031,14 @@ def fetch_missing_sources(dest_dir=THIRDPARTY_DIR):
                         name=package.name, version=package.version)
 
                     if remote_package and remote_package.sdist:
-                        print(f'Fetching sources from Remote')
+                        print('Fetching sources from Remote')
                         remote_package.fetch_sdist(dest_dir=dest_dir)
                         continue
 
             except RemoteNotFetchedException as e:
                 print(f'Failed to fetch remote package info: {e}')
 
-            print(f'No sources found')
+            print('No sources found')
             not_found.append((package.name, package.version,))
 
     return not_found
@@ -2096,13 +2063,11 @@ def fetch_missing_wheels(
     fetched_filenames = set()
     for package, envt in packages_and_envts:
 
-        filename = package.fetch_wheel(
+        if filename := package.fetch_wheel(
             environment=envt,
             fetched_filenames=fetched_filenames,
             dest_dir=dest_dir,
-        )
-
-        if filename:
+        ):
             fetched_filenames.add(filename)
         else:
             not_fetched.append((package, envt,))
@@ -2131,8 +2096,8 @@ def build_missing_wheels(
     for package, pkg_envts in packages_and_envts:
 
         envts = [envt for _pkg, envt in pkg_envts]
-        python_versions = sorted(set(e.python_version for e in envts))
-        operating_systems = sorted(set(e.operating_system for e in envts))
+        python_versions = sorted({e.python_version for e in envts})
+        operating_systems = sorted({e.operating_system for e in envts})
         built = None
         try:
             built = build_wheels(
@@ -2154,8 +2119,7 @@ def build_missing_wheels(
             print('#############################################################')
 
         if not built:
-            for envt in pkg_envts:
-                not_built.append((package, envt))
+            not_built.extend((package, envt) for envt in pkg_envts)
         else:
             for bfn in built:
                 print(f'   --> Built wheel: {bfn}')
@@ -2171,11 +2135,11 @@ def build_missing_wheels(
 
 
 def get_paths_or_urls(links_url):
-    if links_url.startswith('https:'):
-        paths_or_urls = find_links_from_release_url(links_url)
-    else:
-        paths_or_urls = find_links_from_dir(links_url)
-    return paths_or_urls
+    return (
+        find_links_from_release_url(links_url)
+        if links_url.startswith('https:')
+        else find_links_from_dir(links_url)
+    )
 
 
 def find_links_from_dir(directory=THIRDPARTY_DIR):
@@ -2184,8 +2148,11 @@ def find_links_from_dir(directory=THIRDPARTY_DIR):
     any of the extension in the list of `extensions` strings.
     """
     base = os.path.abspath(directory)
-    files = [os.path.join(base, f) for f in os.listdir(base) if f.endswith(EXTENSIONS)]
-    return files
+    return [
+        os.path.join(base, f)
+        for f in os.listdir(base)
+        if f.endswith(EXTENSIONS)
+    ]
 
 
 get_links = re.compile('href="([^"]+)"').findall
@@ -2263,7 +2230,7 @@ def get_link_for_filename(filename, paths_or_urls):
     path_or_url = [l for l in paths_or_urls if l.endswith(f'/{filename}')]
     if not path_or_url:
         raise Exception(f'Missing link to file: {filename}')
-    if not len(path_or_url) == 1:
+    if len(path_or_url) != 1:
         raise Exception(f'Multiple links to file: {filename}: \n' + '\n'.join(path_or_url))
     return path_or_url[0]
 
@@ -2301,8 +2268,9 @@ def get_required_packages(required_name_versions):
 
     # check that we are not missing any
     repos_name_versions = set(remote_packages.keys()) | set(pypi_packages.keys())
-    missing_name_versions = required_name_versions.difference(repos_name_versions)
-    if missing_name_versions:
+    if missing_name_versions := required_name_versions.difference(
+        repos_name_versions
+    ):
         raise MissingRequirementException(sorted(missing_name_versions))
 
     return remote_packages, pypi_packages
@@ -2604,17 +2572,18 @@ def add_or_upgrade_built_wheels(
             pypi_package = get_pypi_repo().get_latest_version(name)
             version = pypi_package.version
 
-        # Check if requested wheel already exists remotely or in Pypi for this version
-        wheel_filename = fetch_package_wheel(
-            name=name, version=version, environment=environment, dest_dir=dest_dir)
-        if wheel_filename:
+        if wheel_filename := fetch_package_wheel(
+            name=name,
+            version=version,
+            environment=environment,
+            dest_dir=dest_dir,
+        ):
             wheel_filenames.append(wheel_filename)
 
         # the wheel is not available locally, remotely or in Pypi
         # we need to build binary from sources
         requirements_specifier = f'{name}=={version}'
-        to_build = wheels_to_build.get(requirements_specifier)
-        if to_build:
+        if to_build := wheels_to_build.get(requirements_specifier):
             to_build['python_versions'].append(python_version)
             to_build['operating_systems'].append(operating_system)
         else:
@@ -2722,7 +2691,7 @@ def build_wheels_remotely_on_multiple_platforms(
         romp_args.append('--verbose')
 
     print(f'Building wheels for: {requirements_specifier}')
-    print(f'Using command:', ' '.join(romp_args))
+    print('Using command:', ' '.join(romp_args))
     call(romp_args)
 
     wheel_filenames = extract_tar('artifacts.tar.gz', dest_dir)
@@ -2796,7 +2765,7 @@ def build_wheels_locally_if_pure_python(
     ]
 
     print(f'Building local wheels for: {requirements_specifier}')
-    print(f'Using command:', ' '.join(cli_args))
+    print('Using command:', ' '.join(cli_args))
     call(cli_args)
 
     built = os.listdir(wheel_dir)
@@ -2806,9 +2775,9 @@ def build_wheels_locally_if_pure_python(
     all_pure = all(is_pure_wheel(bwfn) for bwfn in built)
 
     if not all_pure:
-        print(f'  Some wheels are not pure')
+        print('  Some wheels are not pure')
 
-    print(f'  Copying local wheels')
+    print('  Copying local wheels')
     pure_built = []
     for bwfn in built:
         owfn = os.path.join(dest_dir, bwfn)
@@ -2896,15 +2865,13 @@ def fetch_package_wheel(name, version, environment, dest_dir=THIRDPARTY_DIR):
     Trying fetching from our own remote repo, then from PyPI.
     """
     wheel_filename = None
-    remote_package = get_remote_package(name=name, version=version)
-    if remote_package:
+    if remote_package := get_remote_package(name=name, version=version):
         wheel_filename = remote_package.fetch_wheel(
             environment=environment, dest_dir=dest_dir)
         if wheel_filename:
             return wheel_filename
 
-    pypi_package = get_pypi_package(name=name, version=version)
-    if pypi_package:
+    if pypi_package := get_pypi_package(name=name, version=version):
         wheel_filename = pypi_package.fetch_wheel(
             environment=environment, dest_dir=dest_dir)
     return wheel_filename
